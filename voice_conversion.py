@@ -8,6 +8,7 @@ import librosa
 from pathlib import Path
 import numpy as np
 from math import ceil
+import glob
 
 
 def pad_seq(x, base=32):
@@ -46,35 +47,43 @@ def voice_conversion(G, input_wavfile, parallel=True):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--wav_path')
-    parser.add_argument('--model_path')
+    parser.add_argument('--model')
     parser.add_argument('--parallel', dest='parallel', default=False, action='store_true')
     args = parser.parse_args()
 
     device = "cuda:0"
+
+    model_path = "../saved_models/" # please change it to the trained models' path
 
     G = Generator(hparams.dim_neck, hparams.speaker_embedding_size, 512, hparams.freq, is_train=False,
                   encoder_type="single",
                   discriminator=True,
                   use_lsgan=True,
                   train_wavenet=True).to(device)
-    print("Loading autovc model...", end='\t')
-    load_model = args.model_path
-    if load_model is None:
-        load_model = ""
-    d = torch.load(load_model)
-    newdict = d.copy()
-    for key, value in d.items():
-        newkey = key
-        if 'wavenet' in key:
-            newdict[key.replace('wavenet', 'vocoder')] = newdict.pop(key)
-            newkey = key.replace('wavenet', 'vocoder')
-        if 'module' in key:
-            newdict[newkey.replace('module.','.',1)] = newdict.pop(newkey)
-            newkey = newkey.replace('module.', '.', 1)
-        if newkey not in G.state_dict():
-            newdict.pop(newkey)
-    print("Load " + str(len(newdict)) + " parameters!")
-    G.load_state_dict(newdict, strict=False)
-    print("Done.")
 
-    voice_conversion(G, args.wav_path, args.parallel)
+    model_list = glob.glob(model_path + "*.pkl")
+    name_list = [x.split('/')[-1].split('.')[0] for x in model_list]
+    print(name_list)
+    if args.model in name_list:
+        print("Loading autovc model...", end='\t')
+        load_model = "../saved_models/%s.pkl" % args.model
+        d = torch.load(load_model)
+        newdict = d.copy()
+        for key, value in d.items():
+            newkey = key
+            if 'wavenet' in key:
+                newdict[key.replace('wavenet', 'vocoder')] = newdict.pop(key)
+                newkey = key.replace('wavenet', 'vocoder')
+            if 'module' in key:
+                newdict[newkey.replace('module.','',1)] = newdict.pop(newkey)
+                newkey = newkey.replace('module.', '', 1)
+            if newkey not in G.state_dict():
+                #print(newkey)
+                newdict.pop(newkey)
+        print("Load " + str(len(newdict)) + " parameters!")
+        G.load_state_dict(newdict, strict=False)
+        print("Done.")
+
+        voice_conversion(G, args.wav_path, args.parallel)
+    else:
+        print("Unknown Examplar!")
